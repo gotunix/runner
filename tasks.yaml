@@ -1,0 +1,59 @@
+name: "Pipeline: update-non_production"
+jobs:
+  # 1. High priority standalone job utilizing metadata variables!
+  - name: test-priority-${TARGET_PRIORITY}
+    command: "echo \"Pre-flight checks passing... My Env='${MY_TEST_VAR}'\" && sleep 1"
+    priority: "${TARGET_PRIORITY}"
+    env:
+      TARGET_PRIORITY: "1"
+      MY_TEST_VAR: "Run triggered at epoch: ${TIMESTAMP}"
+
+  # 2. Medium Priority standalone job with a WAIT barrier
+  - name: database-servers
+    command: "echo ' DB Servers...' && sleep 2"
+    priority: 5
+    wait_for_completion: true
+
+  # 3. Medium priority cluster grouping utilizing variables in cluster name
+  - cluster: ${PROJECT_ID}-docker
+    priority: 5
+    env:
+      PROJECT_ID: acme
+    tasks:
+      - name: docker-az1
+        command: "echo 'Docker AZ1' && sleep 1"
+      - name: docker-az2
+        command: "echo 'Docker AZ2' && sleep 1"
+      - name: docker-az3
+        command: "echo 'Docker AZ3' && sleep 1"
+
+  # 4. Medium priority cluster
+  - cluster: kubernetes
+    priority: 5
+    tasks:
+      - name: kubernetes-az1
+        command: "echo 'K8s AZ1' && sleep 1"
+      - name: kubernetes-az2
+        # Simulated failure! This will fail, causing az3 to be SKIPPED
+        # AND it will completely flip the global pipeline health to FAILED!
+        command: "echo 'K8s AZ2 failing...' && sleep 1 && exit 1"
+      - name: kubernetes-az3
+        command: "echo 'K8s AZ3' && sleep 1"
+
+  # 5. Conditional Success-Only Cleanup (Will SKIP because K8s failed)
+  - name: standard-cleanup
+    command: "echo 'Cleaning up normally...'"
+    priority: 10
+    run_on: success
+
+  # 6. Global Unconditional Teardown (Will RUN ALWAYS despite failures)
+  - name: critical-teardown
+    command: "echo 'Forcing heavy teardown due to pipeline status!'"
+    priority: 10
+    run_on: always
+    
+  # 7. Slack Alert (Will ONLY RUN because the pipeline failed)
+  - name: slack-alert
+    command: "echo 'WARNING: Pipeline broke! Alerting team...'"
+    priority: 10
+    run_on: failure
