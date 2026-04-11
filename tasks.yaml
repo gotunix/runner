@@ -1,4 +1,7 @@
 name: "Pipeline: update-non_production"
+info: |
+  This pipeline safely phases production updates across clusters.
+  Run manually initiated by ${USER} in ${PWD}.
 jobs:
   # 1. Standalone task that is explicitly disabled and will skip execution
   - name: legacy-system-check

@@ -38,7 +38,8 @@ import yaml
 from collections import defaultdict
 from rich.live import Live
 from rich.table import Table
-from rich.console import Console
+from rich.console import Console, Group
+from rich.panel import Panel
 
 console = Console()
 
@@ -164,7 +165,7 @@ def resolve_string(target_str, dynamic_vars):
             res = res.replace(dyn_k, dyn_v)
     return res
 
-def generate_table(all_jobs, run_name=None):
+def generate_ui(all_jobs, run_name=None, info_text=None):
     title = "[white on default]Background Job Runner Status[/white on default]"
     if run_name:
         title += f"\n[white on default]{run_name}[/white on default]"
@@ -180,6 +181,9 @@ def generate_table(all_jobs, run_name=None):
         duration_str = f"{job.duration:.2f}s" if job.duration > 0 else "-"
         table.add_row(str(priority), job.group_name, job.name, job.state, duration_str)
         
+    if info_text:
+        panel = Panel(info_text, title="Information", border_style="blue")
+        return Group(table, panel)
     return table
 
 async def main():
@@ -198,11 +202,18 @@ async def main():
         sys.exit(1)
 
     raw_run_name = config.get("name")
+    raw_info_text = config.get("info")
+    top_level_vars = build_dynamic_vars(config.get('env', {}))
+    
     if raw_run_name:
-        top_level_vars = build_dynamic_vars(config.get('env', {}))
         run_name_title = resolve_string(str(raw_run_name), top_level_vars)
     else:
         run_name_title = None
+        
+    if raw_info_text:
+        run_info_text = resolve_string(str(raw_info_text), top_level_vars)
+    else:
+        run_info_text = None
 
     jobs_config = config.get("jobs", [])
     if not jobs_config:
@@ -326,14 +337,14 @@ async def main():
         console.print("[cyan]Running in CRON mode...[/cyan]")
         await engine()
         console.print("\n[green]Execution Completed. Final Status:[/green]")
-        console.print(generate_table(all_jobs_for_ui, run_name=run_name_title))
+        console.print(generate_ui(all_jobs_for_ui, run_name=run_name_title, info_text=run_info_text))
     else:
-        with Live(generate_table(all_jobs_for_ui, run_name=run_name_title), refresh_per_second=4, console=console) as live:
+        with Live(generate_ui(all_jobs_for_ui, run_name=run_name_title, info_text=run_info_text), refresh_per_second=4, console=console) as live:
             async def ui_updater(engine_task):
                 while not engine_task.done():
-                    live.update(generate_table(all_jobs_for_ui, run_name=run_name_title))
+                    live.update(generate_ui(all_jobs_for_ui, run_name=run_name_title, info_text=run_info_text))
                     await asyncio.sleep(0.2)
-                live.update(generate_table(all_jobs_for_ui, run_name=run_name_title))
+                live.update(generate_ui(all_jobs_for_ui, run_name=run_name_title, info_text=run_info_text))
                 
             engine_t = asyncio.create_task(engine())
             updater_t = asyncio.create_task(ui_updater(engine_t))
