@@ -182,7 +182,7 @@ def generate_ui(all_jobs, run_name=None, info_text=None):
         table.add_row(str(priority), job.group_name, job.name, job.state, duration_str)
         
     if info_text:
-        panel = Panel(info_text, title="Information", border_style="blue")
+        panel = Panel(info_text, title="Information", border_style="blue", width=121)
         return Group(table, panel)
     return table
 
