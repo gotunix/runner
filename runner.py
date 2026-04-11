@@ -227,6 +227,13 @@ async def main():
         
         if 'cluster' in j_dict:
             cluster_name = resolve_string(str(j_dict['cluster']), cluster_vars)
+            
+            cluster_disabled = False
+            if 'disabled' in j_dict:
+                cluster_disabled = str(j_dict['disabled']).lower() == 'true'
+            elif 'enabled' in j_dict:
+                cluster_disabled = str(j_dict['enabled']).lower() == 'false'
+                
             group = JobGroup(cluster_name, priority, wait_flag, run_on)
             for t in j_dict.get('tasks', []):
                 t_env = {**priority_env, **t.get('env', {})}
@@ -238,6 +245,10 @@ async def main():
                     is_disabled = str(t['disabled']).lower() == 'true'
                 elif 'enabled' in t:
                     is_disabled = str(t['enabled']).lower() == 'false'
+                    
+                if cluster_disabled:
+                    is_disabled = True
+                    
                 job = Job(group.name, t_name, t['command'], t_env, disabled=is_disabled)
                 group.jobs.append(job)
                 all_jobs_for_ui.append((job, priority))
