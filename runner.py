@@ -48,14 +48,15 @@ class JobState:
     SUCCESS = "[green]Success[/green]"
     FAILED = "[red]Failed[/red]"
     SKIPPED = "[yellow]Skipped[/yellow]"
+    DISABLED = "[dim]Disabled[/dim]"
 
 class Job:
-    def __init__(self, group_name, name, command, env=None):
+    def __init__(self, group_name, name, command, env=None, disabled=False):
         self.group_name = group_name
         self.name = name
         self.command = command
         self.env = env or {}
-        self.state = JobState.WAITING
+        self.state = JobState.DISABLED if disabled else JobState.WAITING
         self.duration = 0.0
         self.stdout = ""
         self.stderr = ""
@@ -70,6 +71,8 @@ class JobGroup:
 
     async def run(self):
         for job in self.jobs:
+            if job.state == JobState.DISABLED:
+                continue
             success = await self._run_command(job)
             if not success:
                 found = False
@@ -230,7 +233,12 @@ async def main():
                 task_vars = build_dynamic_vars(t_env)
                 
                 t_name = resolve_string(str(t['name']), task_vars)
-                job = Job(group.name, t_name, t['command'], t_env)
+                is_disabled = False
+                if 'disabled' in t:
+                    is_disabled = str(t['disabled']).lower() == 'true'
+                elif 'enabled' in t:
+                    is_disabled = str(t['enabled']).lower() == 'false'
+                job = Job(group.name, t_name, t['command'], t_env, disabled=is_disabled)
                 group.jobs.append(job)
                 all_jobs_for_ui.append((job, priority))
             tiers[priority].append(group)
@@ -239,8 +247,14 @@ async def main():
             task_vars = build_dynamic_vars(t_env)
             t_name = resolve_string(str(j_dict.get('name', 'unnamed')), task_vars)
             
+            is_disabled = False
+            if 'disabled' in j_dict:
+                is_disabled = str(j_dict['disabled']).lower() == 'true'
+            elif 'enabled' in j_dict:
+                is_disabled = str(j_dict['enabled']).lower() == 'false'
+                
             group = JobGroup("standalone", priority, wait_flag, run_on)
-            job = Job("standalone", t_name, j_dict['command'], t_env)
+            job = Job("standalone", t_name, j_dict['command'], t_env, disabled=is_disabled)
             group.jobs.append(job)
             all_jobs_for_ui.append((job, priority))
             tiers[priority].append(group)
@@ -275,7 +289,8 @@ async def main():
                     
                 if not should_run:
                     for j in group.jobs:
-                        j.state = JobState.SKIPPED
+                        if j.state != JobState.DISABLED:
+                            j.state = JobState.SKIPPED
                     continue
 
                 if group.wait_for_completion:
@@ -316,7 +331,7 @@ async def main():
             await updater_t
 
     if args.verbose_all or args.verbose:
-        target_jobs = [j for j, _ in all_jobs_for_ui if j.state not in (JobState.WAITING, JobState.SKIPPED)]
+        target_jobs = [j for j, _ in all_jobs_for_ui if j.state not in (JobState.WAITING, JobState.SKIPPED, JobState.DISABLED)]
         if not args.verbose_all:
             target_jobs = [j for j in target_jobs if j.state == JobState.FAILED]
             

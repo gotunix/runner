@@ -1,6 +1,12 @@
 name: "Pipeline: update-non_production"
 jobs:
-  # 1. High priority standalone job utilizing metadata variables!
+  # 1. Standalone task that is explicitly disabled and will skip execution
+  - name: legacy-system-check
+    command: "echo 'Checking legacy systems...'"
+    priority: 1
+    disabled: true
+
+  # 2. High priority standalone job utilizing metadata variables!
   - name: test-priority-${TARGET_PRIORITY}
     command: "echo \"Pre-flight checks passing... My Env='${MY_TEST_VAR}'\" && sleep 1"
     priority: "${TARGET_PRIORITY}"
@@ -31,6 +37,9 @@ jobs:
   - cluster: kubernetes
     priority: 5
     tasks:
+      - name: kubernetes-az0-legacy
+        command: "echo 'K8s AZ0 Legacy'"
+        enabled: false
       - name: kubernetes-az1
         command: "echo 'K8s AZ1' && sleep 1"
       - name: kubernetes-az2
